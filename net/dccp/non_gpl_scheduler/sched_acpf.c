@@ -61,7 +61,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/rculist.h>
 
 #include <net/mpdccp_link.h>
 #include <net/mpdccp_link_info.h>
@@ -481,8 +480,6 @@ struct sock *schedule_srtt(struct mpdccp_cb *mpcb)
 	return best_sk;
 }
 
-/* This function returns a pointer that is part of a RCU protected
- * structure. It must be called with the rcu_read_lock() held. */
 struct sock *mpdccp_acpfsched(struct mpdccp_cb *mpcb)
 {
 	struct sock *sk;
@@ -493,8 +490,6 @@ struct sock *mpdccp_acpfsched(struct mpdccp_cb *mpcb)
 	if (mpcb->cnt_subflows == 1) {
 		return mpdccp_return_single_flow(mpcb);
 	}
-
-	rcu_read_lock();
 
 	// Determine ACPF mode
 	mpdccp_for_each_sk(mpcb, sk) {
@@ -516,8 +511,6 @@ struct sock *mpdccp_acpfsched(struct mpdccp_cb *mpcb)
 	mpdccp_for_each_sk(mpcb, sk) {
 		update_frac(sk);
 	}
-
-	rcu_read_unlock();
 
 	if (best_sk)
 		mpdccp_pr_debug("ACPF returned socket %p\n", best_sk);
@@ -544,7 +537,6 @@ static void acpfsched_init_subflow(struct sock *sk)
 	if (!sk)
 		return;
 
-	rcu_read_lock_bh();
 #ifdef CONFIG_IP_MPDCCP_DEBUG
 
 	link = mpdccp_ctrl_getlink(sk);
@@ -562,7 +554,6 @@ static void acpfsched_init_subflow(struct sock *sk)
 	acpf_priv->cwnd_frac = init_frac;
 	acpf_priv->last_stamp = acpfsched_jiffies32;
 
-	rcu_read_unlock_bh();
 	return;
 }
 
@@ -590,7 +581,6 @@ static void acpfsched_reinit(struct mpdccp_link_info *linkchg)
 
 	/* Initial priority value */
 	mpdccp_pr_debug("reinit connections\n");
-	rcu_read_lock_bh();
 	mpdccp_for_each_conn(pconnection_list, mpcb) {
 		if (mpcb->sched_ops != &mpdccp_sched_acpf)
 			continue;
@@ -609,7 +599,6 @@ static void acpfsched_reinit(struct mpdccp_link_info *linkchg)
 			mpdccp_link_put(link);
 		}
 	}
-	rcu_read_unlock_bh();
 	return;
 }
 
