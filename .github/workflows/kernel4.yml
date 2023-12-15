@@ -5,7 +5,7 @@ on:
     types:
       - closed
     branches:
-      - mpdccp_v03_k4.14
+      - master
   workflow_dispatch:
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          ref: mpdccp_v03_k4.14
+          ref: master
 
       - name: Compile Linux Kernel # use a debian docker for kernel-compilation
         run: |
@@ -61,4 +61,4 @@ jobs:
           git add *.deb
           git commit -a -m "Continuous Integration Build Artifacts" && git push || exit 0
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW }}
+          GH_TOKEN: ${{ secrets.MPDCCP_TOKEN }}
