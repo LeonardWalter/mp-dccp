@@ -1,9 +1,7 @@
 name: Compile and Package Kernel v5.10
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - mpdccp_v03_k5.10
   workflow_dispatch:

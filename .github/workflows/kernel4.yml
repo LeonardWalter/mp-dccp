@@ -1,9 +1,7 @@
 name: Compile and Package Kernel v4.14
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - mpdccp_v03_k4.14
   workflow_dispatch:
