@@ -31,7 +31,7 @@ jobs:
             #apt install -y cmake gcc build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison rsync
             #cp sampleconfig .config
             #make -j$(nproc) bindeb-pkg
-            date > linux-headers-4.14.111-mpdccp-2022-01-27_4.14.111-mpdccp-2022-01-27-1_amd64.deb
+            date > ../linux-headers-4.14.111-mpdccp-2022-01-27_4.14.111-mpdccp-2022-01-27-1_amd64.deb
             mkdir -p pkgs && cp ../*.deb pkgs/
           '
 
