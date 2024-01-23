@@ -3,7 +3,7 @@ name: Compile and Package Kernel v4.14
 on:
   push:
     branches:
-      - mpdccp_v03_k4.14
+      - workflow
   workflow_dispatch:
 permissions:
   contents: write
@@ -21,16 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: mpdccp_v03_k4.14
+          ref: workflow
 
       - name: Compile Linux Kernel # use a debian docker for kernel-compilation
         run: |
           docker run --name kernel_builder -v ${{ github.workspace }}:/mp-dccp debian:10-slim /bin/bash -c '
             cd /mp-dccp
-            apt update
-            apt install -y cmake gcc build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison rsync
-            cp sampleconfig .config
-            make -j$(nproc) bindeb-pkg
+            #apt update
+            #apt install -y cmake gcc build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison rsync
+            #cp sampleconfig .config
+            #make -j$(nproc) bindeb-pkg
+            date > linux-headers-4.14.111-mpdccp-2022-01-27_4.14.111-mpdccp-2022-01-27-1_amd64.deb
             mkdir -p pkgs && cp ../*.deb pkgs/
           '
 
