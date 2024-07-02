@@ -5,8 +5,7 @@ on:
     branches:
       - mpdccp_v03_k4.14
   workflow_dispatch:
-permissions:
-  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,32 +29,23 @@ jobs:
             apt update
             apt install -y cmake gcc build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison rsync
             cp sampleconfig .config
-            make -j$(nproc) bindeb-pkg
-            mkdir -p pkgs && cp ../*.deb pkgs/
+            make -sj$(nproc) bindeb-pkg
+            mv ../*.deb .
           '
 
       - name: Upload .deb files to repository
         uses: actions/upload-artifact@v4
         with:
           name: Kernel-deb-files
-          path: ${{ github.workspace }}/pkgs
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout release branch
-        uses: actions/checkout@v4
-        with:
-          ref: release_4
-      - name: Receive debian files
-        uses: actions/download-artifact@v4
-        with:
-          name: "Kernel-deb-files"
+          path: ${{ github.workspace }}/*.deb
+          
       - name: Deploy to Release Branch
         shell: "bash"
         run: |
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git checkout -b release_4
+          git rm -r .
           git add *.deb
-          git commit -a -m "Continuous Integration Build Artifacts" && git push || exit 0
+          git commit -m "Continuous Integration Build Artifacts"
+          git push --force origin release_4
