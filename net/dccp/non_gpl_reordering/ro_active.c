@@ -357,7 +357,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
 	struct mpdccp_reorder_path_cb *pcb = NULL;
 	struct sock *itr;
 	struct my_sock *my_sk = NULL, *my_itr = NULL;
-	u64 exp;
+	u64 exp, max_owd = 0;
 
     if(!rb) {
         ro_err("RO-ERROR: NULL rb");
@@ -398,6 +398,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
      * ### LATENCY ESTIMATION:
      */
     mpdccp_path_est(pcb, rb->latency);
+    mpdccp_owdd_update(pcb, rb->timestamp);
 
     /* 
      * ### RESET EXPIRY-TIMER:
@@ -444,12 +445,13 @@ void do_reorder_active_mod(struct rcv_buff *rb){
         /* find max. and min. delay from all active links (which are active) */
         if(my_itr->pcb->active){
             /* update max. delay */
+            if (my_itr->pcb->onewayd > max_owd) max_owd = my_itr->pcb->onewayd;
             if(__max_sk(acb) == my_itr->pcb->sk) __max_lat_set(acb, mpdccp_get_lat(my_itr->pcb));
             /* new slowest link */
             else if(__max_lat(acb) < mpdccp_get_lat(my_itr->pcb)){
                 __max_lat_set(acb, mpdccp_get_lat(my_itr->pcb));
                 __max_sk_set(acb, my_itr->pcb->sk);
-                 ro_dbug3("RO-DEBUG: slowest acb: %p pcb: %p sk: %p lat: %u", acb, pcb, my_itr->pcb->sk, mpdccp_get_lat(my_itr->pcb));
+                ro_dbug3("RO-DEBUG: slowest acb: %p pcb: %p sk: %p lat: %u", acb, pcb, my_itr->pcb->sk, mpdccp_get_lat(my_itr->pcb));
             } 
 
             /* update min. delay */
@@ -459,7 +461,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
                 __min_lat_set(acb, mpdccp_get_lat(my_itr->pcb));
                 __min_sk_set(acb, my_itr->pcb->sk);
                 ro_dbug3("RO-DEBUG: fastest acb: %p pcb: %p sk: %p lat: %u", acb, pcb, my_itr->pcb->sk, mpdccp_get_lat(my_itr->pcb));
-            } 
+            }
         }
     }
     spin_unlock_bh(&((acb->mpcb)->psubflow_list_lock));
@@ -471,14 +473,14 @@ void do_reorder_active_mod(struct rcv_buff *rb){
      */
 
     if(sysctl_delay_eq){
+        u64 delay = __max_lat(acb) - mpdccp_get_lat(pcb);
+        if(max_owd) delay = max_owd - pcb->onewayd;
         // if we are on any other path than the slowest, use delay equalization
-        if(__max_sk(acb) != pcb->sk){
-            u64 delay = __max_lat(acb) - mpdccp_get_lat(pcb);
-            if(delay > 1 && delay < 200){
-                rbuf_insert(acb, rb, pcb);
-                q_insert(acb, (u64)rb->oall_seqno, delay);
-                goto finished;
-            }
+        if(delay > 1 && delay < 200){ // __max_sk(acb) != pcb->sk && 
+            printk("DEQ(%p): delaying %llu for %llu", rb->mpcb, (u64)rb->oall_seqno, delay);
+            rbuf_insert(acb, rb, pcb);
+            q_insert(acb, (u64)rb->oall_seqno, delay);
+            goto finished;
         }
         if(sysctl_delay_eq == 1){
             mpdccp_forward_skb(rb->skb, rb->mpcb);
@@ -715,7 +717,7 @@ retry:
     first = __rbuf_first(acb);
     if(first != U64_MAX){
         if(!__rbuf_entry(acb, first).skb) goto finished;
-        ret = ktime_compare(__rbuf_entry(acb, first).abs_to, mpdccp_get_now());                     // packet has timedout
+        ret = ktime_compare(__rbuf_entry(acb, first).abs_to, mpdccp_get_now());
         if(ret <= 0) {
             if (__snd(acb)!=first) {
                 __snd_set(acb, first);
