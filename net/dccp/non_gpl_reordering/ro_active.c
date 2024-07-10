@@ -215,6 +215,7 @@ struct mpdccp_rbuf_entry{
     atomic64_t next;
     atomic64_t prev;
     ktime_t q_to;
+    bool queued;
 
     struct mpdccp_reorder_path_cb *pcb;
 };
@@ -315,6 +316,7 @@ static void mpdccp_reorder_active_unregister(void);
 void q_insert(struct active_cb *acb, u64 seqno, u64 delay);
 void q_process(unsigned long arg);
 void q_flush(struct active_cb *acb);
+void q_remove(struct active_cb *acb, u64 i);
 /************************************************* 
  *     reordering
  *************************************************/
@@ -472,15 +474,16 @@ void do_reorder_active_mod(struct rcv_buff *rb){
         // if we are on any other path than the slowest, use delay equalization
         if(__max_sk(acb) != pcb->sk){
             u64 delay = __max_lat(acb) - mpdccp_get_lat(pcb);
-
-            if(delay < 1 || delay > 200)
-                goto forward;
-
-            rbuf_insert(acb, rb, pcb);
-            q_insert(acb, (u64)rb->oall_seqno, delay);
+            if(delay > 1 && delay < 200){
+                rbuf_insert(acb, rb, pcb);
+                q_insert(acb, (u64)rb->oall_seqno, delay);
+                goto finished;
+            }
+        }
+        if(sysctl_delay_eq == 1){
+            mpdccp_forward_skb(rb->skb, rb->mpcb);
             goto finished;
         }
-        goto forward;
     }
 
     /*
@@ -515,7 +518,11 @@ buffer:
 	rbuf_insert(acb, rb, pcb);
 finished:
 	if (__snd(acb)==0) {
-		rbuf_flush(acb, __exp(acb));
+        if(!sysctl_delay_eq){
+            rbuf_flush(acb, __exp(acb));
+        } else {
+            q_flush(acb);
+        }
 	}
 
     spin_unlock_bh(&acb->adaptive_cb_lock);
@@ -560,6 +567,7 @@ void q_insert(struct active_cb *acb, u64 seqno, u64 delay){
         atomic64_set(&acb->rbuf.q_last, seqno);
     }
     __rbuf_entry(acb, seqno).q_to = to;
+    __rbuf_entry(acb, seqno).queued = true;
 }
 
 void q_process(unsigned long arg){
@@ -581,14 +589,15 @@ retry:
 
     if(!head) goto finished;
     if(ktime_after(now, __q_get_to(acb, head))){
-        if(__rbuf_entry(acb, head).skb && __snd(acb)!=head){
-            __snd_set(acb, head);
-        } else {
+        if(__snd(acb)==head){
             printk(KERN_INFO "att sk twice %llu", head);
             return;
         }
-
-        forward(acb, head);
+        q_remove(acb, head);
+        if(sysctl_delay_eq == 1){
+            __snd_set(acb, head);
+            forward(acb, head);
+        }
         update = true;
         goto retry;
     }
@@ -599,6 +608,8 @@ retry:
     }
 finished:
     __snd_set(acb, 0);
+    if(sysctl_delay_eq > 1)
+        rbuf_flush(acb, __exp(acb));
 }
 
 
@@ -625,6 +636,7 @@ void rbuf_init(struct mpdccp_rbuf *rbuf, struct active_cb *acb){
 		__rbuf_entry(acb, i).skb = NULL;
         __rbuf_entry(acb, i).abs_to = ktime_set(0, 0);
         __rbuf_entry(acb, i).q_to = ktime_set(0, 0);
+        __rbuf_entry(acb, i).queued = false;
         atomic64_set(&__rbuf_entry(acb, i).next, 0);
         atomic64_set(&__rbuf_entry(acb, i).prev, 0);
 	}
@@ -675,18 +687,14 @@ void rbuf_flush(struct active_cb *acb, u64 exp){
     u64 first = 0;
 
 	/* rbuf is emtpy */
-	if(__rbuf_size(acb) == 0) goto finished; 
-    if(sysctl_delay_eq){
-        q_flush(acb);
-        return;
-    }
+	if(__rbuf_size(acb) == 0) goto finished;
 
 retry:
 	while(__rbuf_entry(acb, exp).skb){
-        if (__snd(acb)!=exp){
+        if(__rbuf_entry(acb, exp).queued) goto finished;
+        if(__snd(acb)!=exp){
             __snd_set(acb, exp);
-        }
-        else {
+        }else{
             printk(KERN_INFO "att sk twice %llu", exp);
             return;
         }
@@ -931,6 +939,20 @@ void forward_inorder(struct active_cb *acb, u64 i){
     acb->mpcb->glob_lfor_seqno = i;
 }
 
+void q_remove(struct active_cb *acb, u64 i){
+    if (i == __q_first(acb)){
+        atomic64_set(&acb->rbuf.q_first, __q_next(acb, i));
+        __q_prev_set(acb, __q_next(acb, i), 0);
+    }
+    if (i == __q_last(acb)){
+        atomic64_set(&acb->rbuf.q_last, 0);
+    }
+    __q_prev_set(acb, i, 0);
+    __q_next_set(acb, i, 0);
+    __rbuf_entry(acb, i).q_to = ktime_set(0, 0);
+    __rbuf_entry(acb, i).queued = false;
+}
+
 /**
  * Forward skb and reset buffer element.
  */
@@ -953,17 +975,7 @@ void forward(struct active_cb *acb, u64 i){
     }
     __rbuf_entry(acb, i).pcb = NULL;
     __rbuf_entry(acb, i).abs_to = ktime_set(0, 0);
-    __rbuf_entry(acb, i).q_to = ktime_set(0, 0);
-
-    if (i == __q_first(acb)){
-        atomic64_set(&acb->rbuf.q_first, __q_next(acb, i));
-        __q_prev_set(acb, __q_next(acb, i), 0);
-    }
-    if (i == __q_last(acb)){
-        atomic64_set(&acb->rbuf.q_last, 0);
-    }
-    __q_prev_set(acb, i, 0);
-    __q_next_set(acb, i, 0);
+    if(sysctl_delay_eq) q_remove(acb, i);
     __rbuf_size_dec(acb);
     return;
 
