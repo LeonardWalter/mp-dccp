@@ -521,7 +521,7 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
 				opt_recv->dccpor_rtt_value = get_unaligned_be32(value);
 				value += 4;
 				opt_recv->dccpor_rtt_age = get_unaligned_be32(value);
-				dccp_pr_debug("rx opt: DCCPO_MP_RTT = type %u, value %d, age %d, sk %p",
+				printk("rx opt: DCCPO_MP_RTT = type %u, value %d, age %d, sk %p",
 						opt_recv->dccpor_rtt_type, opt_recv->dccpor_rtt_value,
 						opt_recv->dccpor_rtt_age, sk);
 				break;
@@ -1095,6 +1095,7 @@ void dccp_insert_options_mp(struct sock *sk, struct sk_buff *skb)
 						rtt_value, rtt_type, rtt_age, sk, mp_addr_id, my_sk->remote_addr_id);
 			}
 		}
+		if(dccp_sk(sk)->dccps_role == DCCP_ROLE_CLIENT) printk("DEQ(%p): send %llu ", mpcb, mpcb->mp_oall_seqno);
 		dccp_insert_option_mp_seq(skb, &mpcb->mp_oall_seqno, mpcb->do_incr_oallseq);
 		break;
 	case DCCP_PKT_DATA:

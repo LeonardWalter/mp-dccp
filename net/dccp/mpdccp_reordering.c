@@ -332,7 +332,10 @@ struct rcv_buff *mpdccp_init_rcv_buff(struct sock *sk, struct sk_buff *skb, stru
 	//mpdccp_pr_debug("delay %lu sk %p", (unsigned long)rb->latency, sk);
 	if((u8)dsk->dccps_options_received.dccpor_rtt_type == 4){
 		rb->timestamp = (u32)dsk->dccps_options_received.dccpor_rtt_age;
+	} else {
+		rb->timestamp = 0;
 	}
+	printk("DEQ(%p): receive %llu", mpcb, (u64)rb->oall_seqno);
 	return rb;
 }
 EXPORT_SYMBOL(mpdccp_init_rcv_buff);
@@ -432,13 +435,17 @@ finished:
 void mpdccp_owdd_update(struct mpdccp_reorder_path_cb* pcb, u32 timestamp)
 {
 	u32 measurement;
-	if(!timestamp) return;
+	if(!timestamp) {
+		pcb->onewayd = 0;
+		return;
+	}
 	measurement = jiffies_to_msecs(jiffies) - timestamp;
     if(!pcb->onewayd) {
-		pcb->onewayd =  measurement;
+		pcb->onewayd = measurement;
     } else { 	// smoothing measurements as in TCP srtt calculation [rfc 6298]
         int delta_ts = measurement - pcb->onewayd;
-		pcb->onewayd = pcb->onewayd + delta_ts / 8;
+		pcb->onewayd = pcb->onewayd + (delta_ts / 4);
+		//printk("DEQ(%p): now %u, send %u, diff %u, this_owd %u, s_owd %u delta %i", pcb, jiffies_to_msecs(jiffies), timestamp, measurement, pcb->onewayd, (int)(delta_ts/8));
     }
 }
 EXPORT_SYMBOL(mpdccp_owdd_update);

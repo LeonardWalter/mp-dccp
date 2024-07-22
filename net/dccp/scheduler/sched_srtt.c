@@ -73,12 +73,14 @@ static struct sock *mpdccp_srttsched(struct mpdccp_cb *mpcb)
 		/* Skip sockets that are still in handshake or where
 		 * cwnd is full */
 		if (!mpdccp_sk_can_send(sk)) {
+			printk("cant send");
 			mpdccp_pr_debug("Flow %p not established. Continuing...\n", sk);
 			continue;
 		}
 		
 		if (!mpdccp_packet_fits_in_cwnd(sk)){ // && !dccp_ack_pending(sk)
 			mpdccp_pr_debug("Packet does not fit in cwnd of %p. Continuing...\n", sk);
+			printk("no fit in cwd");
 			continue;
 		}
 		

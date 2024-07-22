@@ -87,6 +87,7 @@ bool mpdccp_packet_fits_in_cwnd(struct sock *sk)
 	dp = dccp_sk(sk);
 	if(dp->dccps_hc_tx_ccid == NULL){
 		mpdccp_pr_debug("ccid not yet setup sk %p", sk);
+		printk("not setup yet", sk);
 		return false; 
 	}
 	ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, infop);
@@ -94,6 +95,7 @@ bool mpdccp_packet_fits_in_cwnd(struct sock *sk)
 		mpdccp_pr_debug( "Socket %p is congestion limited (hc->tx_pipe = %d,\
 				hc->tx_cwnd = %d).\n", sk, infop->tcpi_segs_out,
 				infop->tcpi_snd_cwnd);
+		printk("congestion limit on %p", sk);
 		return false;
 	}
 	
@@ -108,6 +110,7 @@ bool mpdccp_packet_fits_in_cwnd(struct sock *sk)
 	
 	if (sk->sk_write_queue.qlen >= space) {
 		mpdccp_pr_debug("Socket %p has a full cwnd.\n", sk);
+		printk("cwnd full on %p", sk);
 		return false;
 	}
 	

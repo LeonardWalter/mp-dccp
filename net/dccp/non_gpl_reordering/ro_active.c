@@ -471,18 +471,22 @@ void do_reorder_active_mod(struct rcv_buff *rb){
     /*
      * ### DELAY EQUALIZATION
      */
-
+    if(__max_sk(acb)!=rb->sk && (max_owd - pcb->onewayd) < 200 ) printk("DEQ(%p): delaying %llu for %llu (%llu) max %llu, this %u", rb->mpcb, (u64)rb->oall_seqno, max_owd - pcb->onewayd, __max_lat(acb) - mpdccp_get_lat(pcb), __max_lat(acb), mpdccp_get_lat(pcb));
     if(sysctl_delay_eq){
         u64 delay = __max_lat(acb) - mpdccp_get_lat(pcb);
-        if(max_owd) delay = max_owd - pcb->onewayd;
+        if(max_owd && pcb->onewayd) {
+            //delay = max_owd - pcb->onewayd;
+            //printk("DEQ(%p): owd %llu", rb->mpcb, delay);
+        }
         // if we are on any other path than the slowest, use delay equalization
         if(delay > 1 && delay < 200){ // __max_sk(acb) != pcb->sk && 
-            printk("DEQ(%p): delaying %llu for %llu", rb->mpcb, (u64)rb->oall_seqno, delay);
+            //printk("DEQ(%p): delaying %llu for %llu (%llu)", rb->mpcb, (u64)rb->oall_seqno, max_owd - pcb->onewayd, __max_lat(acb) - mpdccp_get_lat(pcb));
             rbuf_insert(acb, rb, pcb);
             q_insert(acb, (u64)rb->oall_seqno, delay);
             goto finished;
         }
         if(sysctl_delay_eq == 1){
+            printk("DEQ(%p): forward %llu", rb->mpcb, (u64)rb->oall_seqno);
             mpdccp_forward_skb(rb->skb, rb->mpcb);
             goto finished;
         }
@@ -509,6 +513,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
     else goto buffer;
 
 forward:
+    printk("DEQ(%p): forward %llu ", acb->mpcb, exp);
     mpdccp_forward_skb(rb->skb, rb->mpcb);
     __exp_set(acb, (exp + 1));
     pcb->exp_path_seqno = pcb->path_seqno + 1;
@@ -964,6 +969,7 @@ void forward(struct active_cb *acb, u64 i){
     if(!acb) goto fail0;
     if(!__rbuf_entry(acb, i).skb) goto fail1;
 
+    printk("DEQ(%p): forward %llu ", acb->mpcb, i);
     skb_t = __rbuf_entry(acb, i).skb;
     __rbuf_entry(acb, i).skb = NULL;
     mpdccp_forward_skb(skb_t, acb->mpcb);
@@ -1194,9 +1200,8 @@ static int proc_rbuf_size(struct ctl_table *table, int write,
 /**
  * Set rtt-type according to the chosen delay estimation.
  * 0	= mrtt - measured rtt i.e. raw values
- * 1 	= min_rtt
- * 2  	= max_rtt
- * 3    = srtt
+ * 1 	= krtt - kalman filter
+ * 2  	= drtt - directional rtt filter
  */
 static int proc_rtt_type(struct ctl_table *table, int write,
                 void __user *buffer, size_t *lenp,
