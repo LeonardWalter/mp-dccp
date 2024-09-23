@@ -1095,6 +1095,7 @@ void dccp_insert_options_mp(struct sock *sk, struct sk_buff *skb)
 						rtt_value, rtt_type, rtt_age, sk, mp_addr_id, my_sk->remote_addr_id);
 			}
 		}
+		if(dccp_sk(sk)->dccps_role == DCCP_ROLE_CLIENT) printk("DEQ(%p): send %llu (%u)", mpcb, mpcb->mp_oall_seqno, my_sk->local_addr_id);
 		dccp_insert_option_mp_seq(skb, &mpcb->mp_oall_seqno, mpcb->do_incr_oallseq);
 		break;
 	case DCCP_PKT_DATA:

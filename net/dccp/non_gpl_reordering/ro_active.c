@@ -102,7 +102,7 @@
 #include <linux/vmalloc.h>
 
 /* default values */
-#define RBUF_SIZE       2048     // size of fixed size reordering buffer used in active reordering
+#define RBUF_SIZE       4096     // size of fixed size reordering buffer used in active reordering
 
 #define FTO_DEF 		15
 #define TO_OFF			5
@@ -425,7 +425,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
         /* all links but this one */
         if(itr != pcb->sk){                                             
             if(my_itr->pcb->not_rcv >= sysctl_not_rcv_max){
-                ro_info("RO-INFO: inactive subflow detected : sk (0x%p)", itr);
+                printk("RO-INFO: inactive subflow detected : sk (0x%p)", itr);
                 my_itr->pcb->active = false;                                        // set subflow inactive
                 /* 
                  * reset max. and min. delay and sk in case 
@@ -483,9 +483,11 @@ void do_reorder_active_mod(struct rcv_buff *rb){
         if(delay && delay <= DEQ_MAX_DELAY){
             rbuf_insert(acb, rb, pcb);
             q_insert(acb, (u64)rb->oall_seqno, delay);
+            printk("DEQ(%p): delaying %llu for %llu (%llu) [%llu]", rb->mpcb, (u64)rb->oall_seqno, delay, __max_lat(acb) - mpdccp_get_lat(pcb), max_owd - pcb->onewayd);
             goto finished;
         }
         if(sysctl_delay_eq == 1){
+            printk("DEQ(%p): forward %llu", rb->mpcb, (u64)rb->oall_seqno);
             mpdccp_forward_skb(rb->skb, rb->mpcb);
             goto finished;
         }
@@ -512,6 +514,7 @@ void do_reorder_active_mod(struct rcv_buff *rb){
     else goto buffer;
 
 forward:
+    printk("DEQ(%p): forward %llu ", acb->mpcb, exp);
     mpdccp_forward_skb(rb->skb, rb->mpcb);
     __exp_set(acb, (exp + 1));
     pcb->exp_path_seqno = pcb->path_seqno + 1;
@@ -970,6 +973,7 @@ void forward(struct active_cb *acb, u64 i){
     if(!acb) goto fail0;
     if(!__rbuf_entry(acb, i).skb) goto fail1;
 
+    printk("DEQ(%p): forward %llu (%i)", acb->mpcb, i, __rbuf_size(acb));
     skb_t = __rbuf_entry(acb, i).skb;
     __rbuf_entry(acb, i).skb = NULL;
     mpdccp_forward_skb(skb_t, acb->mpcb);
@@ -983,7 +987,7 @@ void forward(struct active_cb *acb, u64 i){
     }
     __rbuf_entry(acb, i).pcb = NULL;
     __rbuf_entry(acb, i).abs_to = ktime_set(0, 0);
-    if(sysctl_delay_eq) q_remove(acb, i);
+    if(__rbuf_entry(acb, i).queued) q_remove(acb, i);
     __rbuf_size_dec(acb);
     return;
 

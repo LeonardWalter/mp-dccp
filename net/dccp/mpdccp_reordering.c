@@ -335,6 +335,8 @@ struct rcv_buff *mpdccp_init_rcv_buff(struct sock *sk, struct sk_buff *skb, stru
 	} else {
 		rb->timestamp = 0;
 	}
+	printk("DEQ(%p): receive %llu total(%i)", mpcb, (u64)rb->oall_seqno, mpcb->cnt_subflows);
+	if(rb->oall_seqno%1000 == 999) printk("DEQ(%p): role %i", mpcb, dccp_sk(sk)->dccps_role);
 	return rb;
 }
 EXPORT_SYMBOL(mpdccp_init_rcv_buff);

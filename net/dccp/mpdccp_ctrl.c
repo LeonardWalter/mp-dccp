@@ -156,8 +156,10 @@ static int mpdccp_read_from_subflow (struct sock *sk)
         case DCCP_PKT_DATA:
         case DCCP_PKT_DATAACK:
             if (sz > 0) {
-                /* Forward skb to reordering engine */
-                mpcb->reorder_ops->do_reorder(mpdccp_init_rcv_buff(sk, skb, mpcb));
+                if(mpcb->cnt_subflows == 1)
+                    mpdccp_forward_skb(skb, mpcb);
+                else
+                    mpcb->reorder_ops->do_reorder(mpdccp_init_rcv_buff(sk, skb, mpcb));
                 mpdccp_pr_debug("Read %d bytes from socket %p.\n", sz, sk);
             } else {
                 mpdccp_pr_debug("Read zero-length data from socket %p, discarding\n", sk);
